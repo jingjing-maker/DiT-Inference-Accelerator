@@ -1,7 +1,7 @@
-# DiT-Inference-Accelerator
+% # DiT-Inference-Accelerator
 
 # DiT-PPA-15k
-## About This Work
+% ## About This Work
 
 Diffusion Transformer (DiT) inference is a core stage of long-sequence video generation, but its large spatiotemporal token workload creates substantial computational and deployment challenges. In the accompanying work, we develop HERA-PPA, a low-cost simulation platform for evaluating DiT inference accelerators, and propose TAIE, a transfer-aware interaction-enhanced exploration method for efficient multi-objective design-space exploration. HERA-PPA applies hierarchical equivalent reconstruction and aggregation to estimate the complete denoising workload from representative kernel simulations, while TAIE uses representative historical observations, interaction-enhanced architectural features, and multi-objective Gaussian-process models to search for high-quality PPA trade-offs under a limited evaluation budget.
 
