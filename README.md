@@ -1,4 +1,4 @@
-# DiT-PPA-15k
+# DiT-Inference-Accelerator
 
 ## About This Work
 
@@ -8,45 +8,116 @@ The present release focuses on the dataset component of this work. It provides P
 
 DiT-PPA-15k version 1.0 contains PPA estimates for **15,104 accelerator configurations**. This three-objective profile supports accelerator modeling and multi-objective design-space exploration.
 
-## Workload
+# DiT-PPA-15k
 
-We evaluate one denoising step of Wan2.1-T2V-1.3B for a 45-frame video at 832 × 480 pixels. The workload includes conditional and unconditional DiT passes, classifier-free guidance, and the latent update. T5, VAE, host scheduling, and host–device transfers lie outside the reported device-compute scope.
+A dataset for accelerator modeling and design space exploration of video Diffusion Transformer (DiT) inference.
 
-We generate the estimates with HERA-PPA using GPGPU-Sim for execution modeling, AccelWattch for power estimation, and McPAT for processor area. HERA reconstructs the complete workload from representative kernel simulations.
+## Overview
 
-## Data
+Long-sequence video generation processes large numbers of spatiotemporal tokens. Evaluating the performance, power, and area (PPA) of many accelerator designs for this workload can require expensive simulation.
 
-`DiT-PPA-15k.csv` is a UTF-8 CSV with one header row and **46 columns**. Each row represents one distinct configuration, ordered by `design_id`.
+DiT-PPA-15k provides PPA estimates for **15,104 distinct accelerator configurations** evaluated on a fixed Wan2.1 inference workload. It supports PPA prediction, analysis of architecture trade-offs, and multi-objective design space exploration.
 
-| Columns | Content                         |
-| ------- | ------------------------------- |
-| 1       | Configuration identifier        |
-| 2–5     | Four categorical preset indices |
-| 6–43    | 38 hardware parameters          |
-| 44–46   | Three PPA outputs               |
+This version stores standardized PPA targets. The means, standard deviations, and recovery code are included here so the dataset can be used independently.
 
-The configurations cover every preset level in a design space of 300,160 candidates. Hardware parameters describe execution resources, storage capacities, clock frequencies, memory settings, and pipeline widths.
+## Dataset at a glance
 
-Preset indices and `memory_partition_indexing_code` are categorical codes. Clocks use MHz, capacities ending in `_bytes` use bytes, register capacities count 32-bit entries, and pipeline widths count instruction slots.
+| Item                   | Description                                                |
+| ---------------------- | ---------------------------------------------------------- |
+| Version                | 1.0                                                        |
+| Labeled configurations | 15,104                                                     |
+| Candidate design space | 300,160 configurations                                     |
+| Configuration fields   | 38 hardware parameters and four categorical preset indices |
+| Targets                | IPC, mean device power, and processor area                 |
+| File                   | `DiT-PPA-15k.csv`, UTF-8, 15,104 data rows and 46 columns  |
 
-## PPA outputs
+The records cover all 536 structural presets, eight capacity presets, ten clock presets, and seven execution and memory-access presets. They form a subset of the candidate design space.
 
-| Column            | Definition and unit                                          | Objective |
-| ----------------- | ------------------------------------------------------------ | --------- |
-| `Performance_IPC` | Estimated device-wide PTX thread instructions per core cycle | Maximize  |
-| `Power_W`         | Estimated mean device power over the complete workload, in W | Minimize  |
-| `Area_um2`        | McPAT processor area, in µm²                                 | Minimize  |
+## Workload and data generation
 
-IPC uses instruction work aggregated across all streaming multiprocessors and the unrounded reconstructed core-cycle count. Area is converted from mm² using 1 mm² = 1,000,000 µm².
+The workload is **one denoising step of Wan2.1-T2V-1.3B** for a 45-frame video at 832 × 480 pixels. It includes conditional and unconditional DiT passes, classifier-free guidance, and the latent update. The reported device computation excludes T5 text encoding, VAE processing, host scheduling gaps, and host–device transfers.
 
-## Usage
+HERA-PPA estimates the complete step through representative invocation selection, intra-kernel sampling, and occupancy-equivalent reconstruction. It uses GPGPU-Sim for execution modeling, AccelWattch for power modeling, and McPAT for processor area. The labels are simulation and model estimates for this workload.
 
-Load the table with pandas and select hardware inputs and PPA targets.
+## Data format
+
+Each row describes one accelerator configuration. Records are sorted by `design_id`, which identifies a candidate in the original design space. IDs need not be consecutive.
+
+| Columns | Contents                                                                 |
+| ------- | ------------------------------------------------------------------------ |
+| 1       | `design_id`, the record key                                              |
+| 2–5     | `structure_index`, `occupancy_index`, `clock_index`, and `profile_index` |
+| 6–43    | Hardware settings and derived capacities                                 |
+| 44–46   | The three PPA targets                                                    |
+
+The preset indices and `memory_partition_indexing_code` are categorical codes. Frequencies use MHz, capacities ending in `_bytes` use bytes, and register capacities count 32-bit entries. `DRAM_latency_cycles` uses core cycles. Execution-unit counts and pipeline widths follow GPGPU-Sim's definitions.
+
+## PPA targets
+
+| Column                   | Physical quantity represented      | Objective |
+| ------------------------ | ---------------------------------- | --------- |
+| `Performance_IPC_zscore` | Device-wide instruction throughput | Maximize  |
+| `Power_zscore`           | Mean device power                  | Minimize  |
+| `Area_zscore`            | Processor area                     | Minimize  |
+
+The CSV stores dimensionless Z-scores. Configuration fields retain their original values. The statistics and example below recover IPC, power in W, and area in µm² directly from this CSV.
+
+IPC counts PTX thread instructions across all streaming multiprocessors and divides by the unrounded reconstructed core-cycle count. Power is averaged over the complete device workload. Area is the McPAT processor estimate, with 1 mm² = 1,000,000 µm².
+
+## Target standardization
+
+Each target uses its mean and population standard deviation across all 15,104 configurations (`ddof=0`):
+
+```text
+z = (y - mean) / std
+y = z * std + mean
+```
+
+Negative Z-scores are valid. The transform preserves each target's ordering and optimization direction. The parameters below use the physical units of `y` and are also included in the example code.
+
+| Recovered metric  | Unit                               |               Mean |     Population std |
+| ----------------- | ---------------------------------- | -----------------: | -----------------: |
+| `Performance_IPC` | PTX thread instructions/core cycle | 309.78921479403266 | 122.06598727898213 |
+| `Power_W`         | W                                  |  87.49169895197576 |  6.451742865679787 |
+| `Area_um2`        | µm²                                |  332115873.6758475 | 145464327.37123615 |
+
+## Quick start
+
+The example requires Python and `pandas`. Run it in the directory containing `DiT-PPA-15k.csv`.
 
 ```python
 import pandas as pd
 
-df = pd.read_csv("DiT-PPA-15k.csv")
+df = pd.read_csv("DiT-PPA-15k.csv", float_precision="round_trip")
+
+# Values are (physical column, mean, population standard deviation).
+targets = {
+    "Performance_IPC_zscore": (
+        "Performance_IPC", 309.78921479403266, 122.06598727898213
+    ),
+    "Power_zscore": (
+        "Power_W", 87.49169895197576, 6.451742865679787
+    ),
+    "Area_zscore": (
+        "Area_um2", 332115873.6758475, 145464327.37123615
+    ),
+}
+
 X = df.iloc[:, 5:43]  # 38 hardware parameters
-y = df[["Performance_IPC", "Power_W", "Area_um2"]]
+y = df[list(targets)]  # standardized PPA targets
+physical = df[["design_id"]].copy()
+for z_column, (column, mean, std) in targets.items():
+    physical[column] = df[z_column] * std + mean
 ```
+
+`y` is suitable for experiments using the fixed standardized scale. `physical` contains the same records as IPC, W, and µm² for reporting DSE results. The same inverse transform converts surrogate predictions to physical units.
+
+## Suggested uses
+
+- **PPA prediction:** train surrogate models from hardware settings to the three targets.
+- **Multi-objective exploration:** compare search methods on the released configurations and identify Pareto trade-offs.
+- **Architecture analysis:** examine PPA trends across compute resources, storage capacities, memory settings, and clocks.
+
+Choose training and evaluation splits that match your task. The supplied constants define a fixed benchmark scale. If preprocessing must use only training or already evaluated records, recover physical values and fit a scaler on those records. Keep objectives, constraints, and hypervolume reference points in the same coordinate system.
+
+CSV SHA-256: `71a1496520f34e18ab2bda982a2d5f96190e14e72c3a23ab82ddc1be45e222f1`.
